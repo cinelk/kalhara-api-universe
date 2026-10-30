@@ -1,5 +1,14 @@
 const {Router}=require('express');
 const router=Router();
+const {load,safeUrl,downloadLinks}=require('../services/movie');
+async function fallbackDownload(url,res,reason){
+ try{
+  const source=safeUrl(url);
+  const links=downloadLinks(await load(source));
+  return res.json({ok:true,source,provider:'local-fallback',fallbackReason:reason,count:links.length,links,directVerified:false,note:'Download landing pages only; direct media downloads are not verified.'});
+ }catch(e){return res.status(502).json({ok:false,error:'Provider and local fallback failed',fallbackError:e.message});}
+}
+
 const BASE='https://api-dark-shan-yt.koyeb.app';
 const endpoints={
  search:'/movie/cinesubz-search',
@@ -39,9 +48,10 @@ router.get('/:action',async(req,res)=>{
    }
    const response=await fetch(upstream,{headers,signal:controller.signal,redirect:'error'});
    const raw=await response.text();
-   let data;try{data=JSON.parse(raw)}catch{return res.status(502).json({ok:false,error:'Provider did not return JSON',status:response.status})}
-   res.status(response.ok?200:502).json({ok:response.ok,providerStatus:response.status,request:{action:req.params.action,textProvided:upstream.searchParams.has('text'),textLength:(upstream.searchParams.get('text')||'').length,keyConfigured:!!providerKey},data});
- }catch(e){res.status(502).json({ok:false,error:e.name==='AbortError'?'Provider timeout':'Provider request failed'})}
+   let data;try{data=JSON.parse(raw)}catch{if(req.params.action==='download')return await fallbackDownload(req.query.url||req.query.text,res,'Provider returned non-JSON');return res.status(502).json({ok:false,error:'Provider did not return JSON',status:response.status})}
+   if(req.params.action==='download'&&(!response.ok||data?.status===false))return await fallbackDownload(req.query.url||req.query.text,res,'Provider unavailable or returned an error');
+   res.status(response.ok?200:502).json({ok:response.ok,providerStatus:response.status,data});
+ }catch(e){if(req.params.action==='download')return await fallbackDownload(req.query.url||req.query.text,res,'Provider request failed');res.status(502).json({ok:false,error:e.name==='AbortError'?'Provider timeout':'Provider request failed'})}
  finally{clearTimeout(timer)}
 });
 module.exports=router;
