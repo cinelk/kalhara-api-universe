@@ -1,0 +1,1 @@
+const {Router}=require('express');const r=Router();const {load,cards,filteredSearch,wrap,clean,BASE}=require('../services/movie');r.get('/',wrap(async(req,res)=>{const q=clean(req.query.q);if(!q)return res.status(400).json({ok:false,error:'q required'});res.json({ok:true,query:q,results:filteredSearch(cards(await load(BASE+'/?s='+encodeURIComponent(q))),q)});}));module.exports=r;
