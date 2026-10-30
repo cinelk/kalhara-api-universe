@@ -35,7 +35,7 @@ router.get('/:action',async(req,res)=>{
    const response=await fetch(upstream,{headers,signal:controller.signal,redirect:'error'});
    const raw=await response.text();
    let data;try{data=JSON.parse(raw)}catch{return res.status(502).json({ok:false,error:'Provider did not return JSON',status:response.status})}
-   res.status(response.ok?200:502).json({ok:response.ok,providerStatus:response.status,data});
+   res.status(response.ok?200:502).json({ok:response.ok,providerStatus:response.status,request:{action:req.params.action,textProvided:upstream.searchParams.has('text'),textLength:(upstream.searchParams.get('text')||'').length,keyConfigured:!!providerKey},data});
  }catch(e){res.status(502).json({ok:false,error:e.name==='AbortError'?'Provider timeout':'Provider request failed'})}
  finally{clearTimeout(timer)}
 });
