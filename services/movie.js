@@ -40,8 +40,47 @@ async function load(raw){
 function cards($){const found=[],seen=new Set();$('a[href*="/movies/"],a[href*="/tvshows/"]').each((_,el)=>{const a=$(el);let url;try{url=safeUrl(a.attr('href'))}catch{return}if(!/^\/(movies|tvshows)\/[^/]+\/?$/.test(new URL(url).pathname)||seen.has(url))return;let card=a;for(let i=0;i<4;i++){const parent=card.parent();if(!parent.length||parent.find('a[href*="/movies/"],a[href*="/tvshows/"]').length>3)break;card=parent;if(card.find('.mli-thumb,.imdb-score,.badge-quality-corner').length)break;}const img=card.find('img.mli-thumb,img').first();const title=clean(a.attr('title')||card.find('a.play4').attr('title')||img.attr('alt')||card.find('.mli-info,.title').first().text());if(!title)return;seen.add(url);found.push({title,url,type:url.includes('/tvshows/')?'series':'movie',poster:absoluteUrl(img.attr('data-src')||img.attr('data-lazy-src')||img.attr('src')),imdb:clean(card.find('.imdb-score').first().text())||null,quality:clean(card.find('.badge-quality-corner,.data-quality').first().text())||null});});return found;}
 function filteredSearch(items,q){const terms=clean(q).toLowerCase().split(/\s+/).filter(Boolean);return items.filter(x=>terms.every(t=>clean(x.title).toLowerCase().includes(t)));}
 function episodeList($){const seasons=[];$('.episodes-list').each((_,el)=>{const ul=$(el);const season=Number(ul.attr('data-season')||ul.attr('id')?.match(/\d+$/)?.[0]||1);const episodes=ul.find('a.episode-link,li a[href*="/episodes/"]').map((_,node)=>{const a=$(node);return {episode:Number(a.attr('data-episode')||clean(a.find('.ep-num').text()))||null,title:clean(a.find('.ep-title').text()),date:clean(a.find('.ep-date').text()),thumbnail:absoluteUrl(a.find('img').attr('data-src')||a.find('img').attr('src')),url:absoluteUrl(a.attr('href'))}}).get();if(episodes.length)seasons.push({season,count:episodes.length,episodes});});return seasons;}
-function qualities($){return $('.download-link-item,.movie-download-link-item').map((_,el)=>{const label=clean($(el).find('.download-meta,.movie-download-meta').text());if(!label)return null;const parts=label.split('•').map(clean);return {label,resolution:label.match(/\b(?:480p|720p|1080p|2160p|4K)\b/i)?.[0]||null,size:label.match(/\b\d+(?:\.\d+)?\s*(?:MB|GB|KB|TB)\b/i)?.[0]||null,source:parts[0].replace(/\b(?:480p|720p|1080p|2160p|4K)\b/i,'').trim(),language:parts.at(-1)||null};}).get();}
-function details($,url){const type=url.includes('/episodes/')?'episode':url.includes('/tvshows/')?'series':'movie';const result={type,title:clean($('.details-title h3').first().text()||$('h1').first().text()),url,poster:absoluteUrl($('.poster-img').attr('src')||$('meta[itemprop="image"]').attr('content')),imdb:clean($('.data-imdb').first().text())||null,rating:clean($('[itemprop="ratingValue"]').first().text())||null,year:clean($('.details-info a[href*="/release/"]').first().text())||null,genres:$('.details-genre a').map((_,a)=>clean($(a).text())).get(),description:clean($('.details-desc').text()),cast:$('.zt-cast-card').map((_,e)=>({name:clean($(e).find('.zt-cast-name').text()),role:clean($(e).find('.zt-cast-role').text())})).get(),seasons:episodeList($),qualities:qualities($)};if(type==='episode'){result.episodeTitle=clean($('.details-info p').filter((_,p)=>$(p).text().includes('Episode Title:')).first().find('a').text());result.players=$('.zetaflix_player_option .opt-name').map((_,e)=>clean($(e).text())).get();}return result;}
+function downloadLinks($){
+  const seen=new Set(), items=[];
+  $('.movie-download-link-item,.download-link-item,.download-item,.download-links a,a[href*="/zt-links/"],a[href*="/download/"]').each((_,el)=>{
+    const item=$(el), a=item.is('a')?item:item.find('a[href]').first();
+    const raw=a.attr('href')||item.attr('data-url')||item.attr('data-href');
+    if(!raw||/^\s*(javascript:|data:|#)/i.test(raw))return;
+    const url=absoluteUrl(raw);
+    if(!url||seen.has(url))return;
+    const parsed=new URL(url);
+    if(!['http:','https:'].includes(parsed.protocol)||parsed.username||parsed.password)return;
+    const label=clean(item.find('.download-meta,.movie-download-meta,.opt-name').first().text()||item.text()||a.attr('title'));
+    const context=clean(item.closest('.movie-download-link-item,.download-link-item,.download-item').text()||label);
+    if(!/download|480p|720p|1080p|2160p|4k|web-dl|bluray|mb|gb/i.test(context+' '+url))return;
+    seen.add(url);
+    items.push({
+      label:label||'Download page',
+      resolution:(context.match(/\b(?:480p|720p|1080p|2160p|4K)\b/i)||[])[0]||null,
+      size:(context.match(/\b\d+(?:\.\d+)?\s*(?:MB|GB|KB|TB)\b/i)||[])[0]||null,
+      url,
+      linkType:/\.(?:mp4|mkv|webm|avi)(?:$|\?)/i.test(parsed.pathname+parsed.search)?'media-file':'download-page',
+      directVerified:false
+    });
+  });
+  return items;
+}
+function qualities($){
+  return $('.download-link-item,.movie-download-link-item').map((_,el)=>{
+    const item=$(el),label=clean(item.find('.download-meta,.movie-download-meta').text()||item.text());
+    if(!label)return null;
+    const parts=label.split('•').map(clean);
+    const href=item.is('a')?item.attr('href'):item.find('a[href]').first().attr('href');
+    return {
+      label,resolution:label.match(/\b(?:480p|720p|1080p|2160p|4K)\b/i)?.[0]||null,
+      size:label.match(/\b\d+(?:\.\d+)?\s*(?:MB|GB|KB|TB)\b/i)?.[0]||null,
+      source:parts[0].replace(/\b(?:480p|720p|1080p|2160p|4K)\b/i,'').trim(),
+      language:parts.at(-1)||null,
+      url:href&&!/^\s*(javascript:|data:|#)/i.test(href)?absoluteUrl(href):null
+    };
+  }).get();
+}
+function details($,url){const type=url.includes('/episodes/')?'episode':url.includes('/tvshows/')?'series':'movie';const result={type,title:clean($('.details-title h3').first().text()||$('h1').first().text()),url,poster:absoluteUrl($('.poster-img').attr('src')||$('meta[itemprop="image"]').attr('content')),imdb:clean($('.data-imdb').first().text())||null,rating:clean($('[itemprop="ratingValue"]').first().text())||null,year:clean($('.details-info a[href*="/release/"]').first().text())||null,genres:$('.details-genre a').map((_,a)=>clean($(a).text())).get(),description:clean($('.details-desc').text()),cast:$('.zt-cast-card').map((_,e)=>({name:clean($(e).find('.zt-cast-name').text()),role:clean($(e).find('.zt-cast-role').text())})).get(),seasons:episodeList($),qualities:qualities($),downloadLinks:downloadLinks($)};if(type==='episode'){result.episodeTitle=clean($('.details-info p').filter((_,p)=>$(p).text().includes('Episode Title:')).first().find('a').text());result.players=$('.zetaflix_player_option .opt-name').map((_,e)=>clean($(e).text())).get();}return result;}
 const wrap=fn=>(req,res)=>Promise.resolve().then(()=>fn(req,res)).catch(err=>res.status(502).json({ok:false,error:err.message}));
 const detail=wrap(async(req,res)=>{if(!req.query.url)return res.status(400).json({ok:false,error:'url required'});const url=safeUrl(req.query.url);res.json({ok:true,result:details(await load(url),url)});});
-module.exports={BASE,clean,safeUrl,load,cards,filteredSearch,episodeList,details,wrap,detail};
+module.exports={BASE,clean,safeUrl,load,cards,filteredSearch,episodeList,details,downloadLinks,wrap,detail};
