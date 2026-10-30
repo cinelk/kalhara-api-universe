@@ -1,0 +1,13 @@
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
+app.disable('x-powered-by');
+app.use('/api/movies', require('./routes/movies'));
+app.use('/api/series', require('./routes/series'));
+app.use('/api/episodes', require('./routes/episodes'));
+app.use('/api/search', require('./routes/search'));
+app.use('/api/latest', require('./routes/latest'));
+app.use('/api/info', require('./routes/info'));
+app.get('/api/health', (_,res)=>res.json({ok:true,service:'KALHARA API UNIVERSE',version:'1.0.0'}));
+app.get('/', (_,res)=>res.json({name:'KALHARA API UNIVERSE',api:['/api/health','/api/movies','/api/series','/api/episodes/info?url=...','/api/search?q=...','/api/latest']}));
+app.listen(PORT,()=>console.log('KALHARA API UNIVERSE listening on '+PORT));
