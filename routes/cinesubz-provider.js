@@ -17,6 +17,8 @@ router.get('/:action',async(req,res)=>{
    upstream.searchParams.set(key,value);
  }
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
+ const providerKey=process.env.CINESUBZ_API_KEY;
+ if(providerKey)upstream.searchParams.set('apikey',providerKey);
  try{
    const headers={'Accept':'application/json'};
    // Provider credentials should only be sent if its documented auth scheme is configured.
