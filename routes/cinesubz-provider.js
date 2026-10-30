@@ -20,7 +20,12 @@ router.get('/:action',async(req,res)=>{
    const candidate=req.query.url||req.query.link||req.query.q||req.query.query;
    if(typeof candidate==='string'&&candidate.trim())upstream.searchParams.set('text',candidate.trim());
  }
- if(req.params.action==='download'&&!upstream.searchParams.has('text'))return res.status(400).json({ok:false,error:'text is required',example:'/api/provider/cinesubz/download?text=YOUR_MOVIE_OR_DOWNLOAD_URL'});
+ if(req.params.action==='download'){
+   const source=upstream.searchParams.get('url')||upstream.searchParams.get('text');
+   if(!source)return res.status(400).json({ok:false,error:'url is required',example:'/api/provider/cinesubz/download?url=YOUR_CINESUBZ_URL'});
+   upstream.searchParams.set('url',source);
+   upstream.searchParams.delete('text');
+ }
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
  const providerKey=process.env.CINESUBZ_API_KEY;
  if(providerKey)upstream.searchParams.set('apikey',providerKey);
