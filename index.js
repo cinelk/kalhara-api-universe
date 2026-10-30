@@ -2,6 +2,7 @@ const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.disable('x-powered-by');
+app.use('/api/provider/cinesubz', require('./routes/cinesubz-provider'));
 app.use('/download', require('./routes/download-page'));
 app.use('/api/downloads', require('./routes/downloads'));
 app.use('/api/movies', require('./routes/movies'));
