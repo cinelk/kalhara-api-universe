@@ -1,7 +1,7 @@
 const cheerio = require('cheerio');
-const BASE='https://cinesubz.lk';
+const BASE='https://cinesubz.net';
 const clean = value => String(value ?? '').replace(/\s+/g,' ').trim();
-function safeUrl(raw){const url=new URL(String(raw),BASE);if(url.protocol!=='https:'||url.hostname!=='cinesubz.lk'||url.username||url.password)throw new Error('Only cinesubz.lk HTTPS URLs allowed');return url.href;}
+function safeUrl(raw){const url=new URL(String(raw),BASE);if(url.protocol!=='https:'||!['cinesubz.lk','www.cinesubz.lk','cinesubz.net','www.cinesubz.net'].includes(url.hostname)||url.username||url.password)throw new Error('Only CineSubz HTTPS URLs allowed');return url.href;}
 function absoluteUrl(raw){if(!raw||/^data:/i.test(raw))return null;try{return new URL(raw,BASE).href}catch{return null}}
 async function load(raw){
   let target=safeUrl(raw);
@@ -23,7 +23,7 @@ async function load(raw){
         if(!location)throw new Error('Upstream redirect missing Location header');
         const next=new URL(location,target);
         // Never follow redirects to third-party hosts, private IPs or non-HTTPS URLs.
-        if(next.protocol!=='https:'||!['cinesubz.lk','www.cinesubz.lk'].includes(next.hostname)||next.username||next.password)
+        if(next.protocol!=='https:'||!['cinesubz.lk','www.cinesubz.lk','cinesubz.net','www.cinesubz.net'].includes(next.hostname)||next.username||next.password)
           throw new Error('Upstream redirected outside allowed CineSubz hosts: '+next.hostname);
         target=next.href;
         continue;
