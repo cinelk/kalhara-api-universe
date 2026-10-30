@@ -1,0 +1,1 @@
+const {Router}=require('express'); const r=Router(); const {load,cards,detail,wrap,BASE}=require('../services/movie');r.get('/',wrap(async(_,res)=>res.json({ok:true,results:cards(await load(BASE+'/movies/')).filter(x=>x.type==='movie')})));r.get('/info',detail);module.exports=r;
