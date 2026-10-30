@@ -3,7 +3,40 @@ const BASE='https://cinesubz.lk';
 const clean = value => String(value ?? '').replace(/\s+/g,' ').trim();
 function safeUrl(raw){const url=new URL(String(raw),BASE);if(url.protocol!=='https:'||url.hostname!=='cinesubz.lk'||url.username||url.password)throw new Error('Only cinesubz.lk HTTPS URLs allowed');return url.href;}
 function absoluteUrl(raw){if(!raw||/^data:/i.test(raw))return null;try{return new URL(raw,BASE).href}catch{return null}}
-async function load(raw){const target=safeUrl(raw);const c=new AbortController();const timer=setTimeout(()=>c.abort(),15000);try{const r=await fetch(target,{signal:c.signal,redirect:'manual',headers:{'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36',Accept:'text/html'}});if(!r.ok)throw new Error('Upstream HTTP '+r.status);return cheerio.load(await r.text())}finally{clearTimeout(timer)}}
+async function load(raw){
+  let target=safeUrl(raw);
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),15000);
+  try{
+    for(let hop=0;hop<6;hop++){
+      const r=await fetch(target,{
+        signal:controller.signal,
+        redirect:'manual',
+        headers:{
+          'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept':'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+          'Accept-Language':'en-US,en;q=0.9'
+        }
+      });
+      if([301,302,303,307,308].includes(r.status)){
+        const location=r.headers.get('location');
+        if(!location)throw new Error('Upstream redirect missing Location header');
+        const next=new URL(location,target);
+        // Never follow redirects to third-party hosts, private IPs or non-HTTPS URLs.
+        if(next.protocol!=='https:'||!['cinesubz.lk','www.cinesubz.lk'].includes(next.hostname)||next.username||next.password)
+          throw new Error('Upstream redirected outside allowed CineSubz hosts: '+next.hostname);
+        target=next.href;
+        continue;
+      }
+      if(!r.ok)throw new Error('Upstream HTTP '+r.status+' at '+new URL(target).pathname);
+      const html=await r.text();
+      if(/<title>[^<]*(just a moment|attention required|access denied)/i.test(html))
+        throw new Error('Upstream security challenge; normal HTML unavailable');
+      return cheerio.load(html);
+    }
+    throw new Error('Upstream redirect loop (more than 5 redirects)');
+  }finally{clearTimeout(timer)}
+}
 function cards($){const found=[],seen=new Set();$('a[href*="/movies/"],a[href*="/tvshows/"]').each((_,el)=>{const a=$(el);let url;try{url=safeUrl(a.attr('href'))}catch{return}if(!/^\/(movies|tvshows)\/[^/]+\/?$/.test(new URL(url).pathname)||seen.has(url))return;let card=a;for(let i=0;i<4;i++){const parent=card.parent();if(!parent.length||parent.find('a[href*="/movies/"],a[href*="/tvshows/"]').length>3)break;card=parent;if(card.find('.mli-thumb,.imdb-score,.badge-quality-corner').length)break;}const img=card.find('img.mli-thumb,img').first();const title=clean(a.attr('title')||card.find('a.play4').attr('title')||img.attr('alt')||card.find('.mli-info,.title').first().text());if(!title)return;seen.add(url);found.push({title,url,type:url.includes('/tvshows/')?'series':'movie',poster:absoluteUrl(img.attr('data-src')||img.attr('data-lazy-src')||img.attr('src')),imdb:clean(card.find('.imdb-score').first().text())||null,quality:clean(card.find('.badge-quality-corner,.data-quality').first().text())||null});});return found;}
 function filteredSearch(items,q){const terms=clean(q).toLowerCase().split(/\s+/).filter(Boolean);return items.filter(x=>terms.every(t=>clean(x.title).toLowerCase().includes(t)));}
 function episodeList($){const seasons=[];$('.episodes-list').each((_,el)=>{const ul=$(el);const season=Number(ul.attr('data-season')||ul.attr('id')?.match(/\d+$/)?.[0]||1);const episodes=ul.find('a.episode-link,li a[href*="/episodes/"]').map((_,node)=>{const a=$(node);return {episode:Number(a.attr('data-episode')||clean(a.find('.ep-num').text()))||null,title:clean(a.find('.ep-title').text()),date:clean(a.find('.ep-date').text()),thumbnail:absoluteUrl(a.find('img').attr('data-src')||a.find('img').attr('src')),url:absoluteUrl(a.attr('href'))}}).get();if(episodes.length)seasons.push({season,count:episodes.length,episodes});});return seasons;}
